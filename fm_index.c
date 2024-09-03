@@ -147,9 +147,6 @@ int rank(nucleotides nucleotide, int i) {
   return ((i + 1) - rank1i);
 }
 
-/**
- * Backward Search Algorithm
- */
 int count(char *query) {
 
   int m = strlen(query);
