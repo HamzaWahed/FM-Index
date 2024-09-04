@@ -1,32 +1,28 @@
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-typedef enum _nucleotides { A, C, G, T } nucleotides;
+#define NUM_BITVECTORS 1000000 / 8
+#define NUM_MINIBLOCKS 1000000 / 32
+#define NUM_MACROBLOCKS (1065535 / 65536) * 8
+
+typedef enum _nucleotides { A = 0, C, G, T } nucleotides;
 
 void setup(char *filename);
 int rank1(int i, nucleotides nucleotide);
 int rank(nucleotides nucleotide, int i);
 int count(char *query);
+nucleotides char_to_nucleotide(char c);
 
 int dollarPos;
 uint64_t masks[64];
-char **bitvectors;
-int **miniheaders;
-int **macroheaders;
+
+char bitvectors[4][NUM_BITVECTORS];
+int miniheaders[4][NUM_MINIBLOCKS];
+int macroheaders[4][NUM_MACROBLOCKS];
+long C_array[4];
 
 int main(int argc, char *argv[]) {
-
-  bitvectors = malloc(4 * sizeof(char *));
-  miniheaders = malloc(4 * sizeof(int *));
-  macroheaders = malloc(4 * sizeof(int *));
-
-  for (int i = A; i <= T; i++) {
-    bitvectors[i] = malloc(1000000 / 8);
-    miniheaders[i] = malloc(1000000 / 32);
-    macroheaders[i] = malloc((1065535 / 65536) * 8);
-  }
 
   setup(argv[1]);
 
@@ -36,17 +32,23 @@ int main(int argc, char *argv[]) {
     printf("%i occurrences of %s.\n", count(query), query);
   }
 
-  for (int i = A; i <= T; i++) {
-    free(bitvectors[i]);
-    free(miniheaders[i]);
-    free(macroheaders[i]);
-  }
-
-  free(bitvectors);
-  free(miniheaders);
-  free(macroheaders);
-
   return 0;
+}
+
+nucleotides char_to_nucleotide(char c) {
+  switch (c) {
+  case 'A':
+    return A;
+  case 'C':
+    return C;
+  case 'G':
+    return G;
+  case 'T':
+    return T;
+  default:
+    fprintf(stderr, "Invalid nucleotide character: %c\n", c);
+    return A;
+  }
 }
 
 void setup(char *filename) {
@@ -115,10 +117,18 @@ void setup(char *filename) {
     charMask[(i + 1) / 8] = charMask[(i + 1) / 8] & ~(1 << (i + 1) % 8);
   }
 
+  C_array[A] = 0;
+  C_array[C] = rank(A, 999999);
+  C_array[G] = rank(A, 999999) + rank(C, 999999);
+  C_array[T] = rank(A, 999999) + rank(C, 999999) + rank(G, 999999);
+
   return;
 }
 
-int rank1(int i, nucleotides nucleotide) {
+int rank(nucleotides nucleotide, int i) {
+  if (i < 0) {
+    return 0;
+  }
 
   int sum = (int)miniheaders[nucleotide][i / 64] +
             (int)macroheaders[nucleotide][i / 65536];
@@ -132,35 +142,22 @@ int rank1(int i, nucleotides nucleotide) {
   return sum;
 }
 
-int rank(nucleotides nucleotide, int i) {
-
-  if (i < 0) {
-    return 0;
-  }
-
-  int rank1i = rank1(i, nucleotide);
-
-  if (i >= dollarPos) {
-    return (i + 1) - rank1i - 1;
-  }
-
-  return ((i + 1) - rank1i);
-}
-
 int count(char *query) {
-
   int m = strlen(query);
 
   int s = 0;
   int e = 999999;
 
   for (int i = m - 1; i >= 0 && s <= e; i--) {
-    s = rank(A, s - 1) + 1;
-    e = rank(A, e);
+    s = C_array[char_to_nucleotide(query[i])] +
+        rank(char_to_nucleotide(query[i]), s - 1) + 1;
+    e = C_array[char_to_nucleotide(query[i])] +
+        rank(char_to_nucleotide(query[i]), e);
   }
 
-  if (e < s)
+  if (e < s) {
     return 0;
+  }
 
   return e - s + 1;
 }
