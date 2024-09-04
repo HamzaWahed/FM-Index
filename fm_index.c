@@ -1,10 +1,11 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#define NUM_BITVECTORS 1000000 / 8
-#define NUM_MINIBLOCKS 1000000 / 32
-#define NUM_MACROBLOCKS (1065535 / 65536) * 8
+#define SIZE 1000000
+#define MINIBLOCK_SIZE 64
+#define MACROBLOCK_SIZE 65536
 
 typedef enum _nucleotides { A = 0, C, G, T } nucleotides;
 
@@ -17,12 +18,19 @@ nucleotides char_to_nucleotide(char c);
 int dollarPos;
 uint64_t masks[64];
 
-char bitvectors[4][NUM_BITVECTORS];
-int miniheaders[4][NUM_MINIBLOCKS];
-int macroheaders[4][NUM_MACROBLOCKS];
-long C_array[4];
+char *bitvectors[4];
+uint16_t *miniheaders[4];
+uint64_t *macroheaders[4];
+uint64_t C_array[4];
 
 int main(int argc, char *argv[]) {
+
+  for (int i = A; i <= T; i++) {
+    bitvectors[i] = malloc(SIZE / 8 * sizeof(char));
+    miniheaders[i] = malloc((SIZE / MINIBLOCK_SIZE) * sizeof(uint16_t));
+    macroheaders[i] =
+        malloc(((SIZE + 65535) / MACROBLOCK_SIZE) * sizeof(uint64_t));
+  }
 
   setup(argv[1]);
 
@@ -30,6 +38,12 @@ int main(int argc, char *argv[]) {
 
   while (scanf("%100s", query) == 1) {
     printf("%i occurrences of %s.\n", count(query), query);
+  }
+
+  for (int i = A; i <= T; i++) {
+    free(bitvectors[i]);
+    free(miniheaders[i]);
+    free(macroheaders[i]);
   }
 
   return 0;
@@ -59,10 +73,23 @@ void setup(char *filename) {
   int currentRank[] = {0, 0, 0, 0};
 
   for (int i = A; i <= T; i++) {
-    memset(bitvectors[i], 0, 1000000 / 8);
+    memset(bitvectors[i], 0, SIZE / 8);
   }
 
-  for (int i = 0; i < 1000000; i++) {
+  for (int i = 0; i < SIZE; i++) {
+
+    if (i % MINIBLOCK_SIZE == 0) {
+      for (int j = A; j <= T; j++) {
+        miniheaders[j][i / MINIBLOCK_SIZE] = (uint16_t)miniRank[j];
+      }
+    }
+
+    if (i % MACROBLOCK_SIZE == 0) {
+      for (int j = A; j <= T; j++) {
+        miniRank[j] = 0;
+        macroheaders[j][i / MACROBLOCK_SIZE] = (uint64_t)currentRank[j];
+      }
+    }
 
     char c = (char)fgetc(file);
 
@@ -87,24 +114,10 @@ void setup(char *filename) {
       miniRank[T]++;
       currentRank[T]++;
       break;
-    };
-
-    if (i % 64 == 0) {
-      for (int j = A; j <= T; j++) {
-        miniheaders[j][i / 64] = (uint16_t)miniRank[j];
-      }
-    }
-
-    if (i % 65536 == 0) {
-      for (int j = A; j <= T; j++) {
-        miniRank[j] = 0;
-        macroheaders[j][i / 65536] = (uint64_t)currentRank[j];
-      }
-    }
-
-    if (c == '$') {
+    case '$':
       dollarPos = i;
-    }
+      break;
+    };
   }
 
   fclose(file);
@@ -118,9 +131,9 @@ void setup(char *filename) {
   }
 
   C_array[A] = 0;
-  C_array[C] = rank(A, 999999);
-  C_array[G] = rank(A, 999999) + rank(C, 999999);
-  C_array[T] = rank(A, 999999) + rank(C, 999999) + rank(G, 999999);
+  C_array[C] = rank(A, SIZE - 1);
+  C_array[G] = rank(A, SIZE - 1) + rank(C, SIZE - 1);
+  C_array[T] = rank(A, SIZE - 1) + rank(C, SIZE - 1) + rank(G, SIZE - 1);
 
   return;
 }
@@ -130,10 +143,10 @@ int rank(nucleotides nucleotide, int i) {
     return 0;
   }
 
-  int sum = (int)miniheaders[nucleotide][i / 64] +
-            (int)macroheaders[nucleotide][i / 65536];
+  int sum = (int)miniheaders[nucleotide][i / MINIBLOCK_SIZE] +
+            (int)macroheaders[nucleotide][i / MACROBLOCK_SIZE];
 
-  uint64_t miniblock = bitvectors[nucleotide][(i / 64) * 8];
+  uint64_t miniblock = *(uint16_t *)&bitvectors[nucleotide][(i / 64) * 8];
 
   miniblock = miniblock & masks[i % 64];
 
@@ -146,7 +159,7 @@ int count(char *query) {
   int m = strlen(query);
 
   int s = 0;
-  int e = 999999;
+  int e = SIZE - 1;
 
   for (int i = m - 1; i >= 0 && s <= e; i--) {
     s = C_array[char_to_nucleotide(query[i])] +
