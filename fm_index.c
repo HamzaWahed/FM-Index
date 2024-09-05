@@ -15,7 +15,6 @@ int rank(nucleotides nucleotide, int i);
 int count(char *query);
 nucleotides char_to_nucleotide(char c);
 
-int dollarPos;
 uint64_t masks[64];
 
 char *bitvectors[4];
@@ -60,8 +59,7 @@ nucleotides char_to_nucleotide(char c) {
   case 'T':
     return T;
   default:
-    fprintf(stderr, "Invalid nucleotide character: %c\n", c);
-    return A;
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -87,6 +85,7 @@ void setup(char *filename) {
     if (i % MACROBLOCK_SIZE == 0) {
       for (int j = A; j <= T; j++) {
         miniRank[j] = 0;
+        miniheaders[j][i / MINIBLOCK_SIZE] = 0;
         macroheaders[j][i / MACROBLOCK_SIZE] = (uint64_t)currentRank[j];
       }
     }
@@ -115,7 +114,6 @@ void setup(char *filename) {
       currentRank[T]++;
       break;
     case '$':
-      dollarPos = i;
       break;
     };
   }
@@ -143,10 +141,13 @@ int rank(nucleotides nucleotide, int i) {
     return 0;
   }
 
-  int sum = (int)miniheaders[nucleotide][i / MINIBLOCK_SIZE] +
-            (int)macroheaders[nucleotide][i / MACROBLOCK_SIZE];
+  int macroblock_index = i / MACROBLOCK_SIZE;
+  int miniblock_index = i / MINIBLOCK_SIZE;
 
-  uint64_t miniblock = *(uint16_t *)&bitvectors[nucleotide][(i / 64) * 8];
+  int sum = (int)macroheaders[nucleotide][macroblock_index] +
+            (int)miniheaders[nucleotide][miniblock_index];
+
+  uint64_t miniblock = *(uint64_t *)&bitvectors[nucleotide][(i / 64) * 8];
 
   miniblock = miniblock & masks[i % 64];
 
