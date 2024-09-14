@@ -11,7 +11,7 @@ typedef struct _fm_index {
   uint64_t masks[64];
 } fm_index;
 
-fm_index *setup(char *filename);
+fm_index *build(char *filename);
 int rank(fm_index *fm, nucleotides nucleotide, int i);
 int count(fm_index *fm, char *query);
 nucleotides char_to_nucleotide(char c);
