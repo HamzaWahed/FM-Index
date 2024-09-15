@@ -48,7 +48,10 @@ int main(int argc, char **argv) {
   FILE *pattern_file = fopen(argv[3], "r");
   size_t pattern_length = 10000;
   char *pattern = malloc(pattern_length);
+
   getline(&pattern, &pattern_length, pattern_file);
   printf("mem counts: %lld", MEMs(argv[1], argv[2], pattern));
+
+  free(pattern);
   fclose(pattern_file);
 }
