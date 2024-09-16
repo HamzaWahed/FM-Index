@@ -13,8 +13,6 @@
     _a < _b ? _a : _b;                                                         \
   })
 
-#define max(a, b) ((a) + (b) - min(a, b))
-
 uint64_t MEMs(char *file, char *rev_file, char *pattern) {
   fm_index *fm = build(file);
   fm_index *rev_fm = build(rev_file);
