@@ -1,3 +1,4 @@
+#include "fm_index.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,47 +7,6 @@
 #define SIZE 1000000
 #define MINIBLOCK_SIZE 64
 #define MACROBLOCK_SIZE 65536
-
-typedef enum _nucleotides { A = 0, C, G, T } nucleotides;
-
-void setup(char *filename);
-int rank1(int i, nucleotides nucleotide);
-int rank(nucleotides nucleotide, int i);
-int count(char *query);
-nucleotides char_to_nucleotide(char c);
-
-uint64_t masks[64];
-
-char *bitvectors[4];
-uint16_t *miniheaders[4];
-uint64_t *macroheaders[4];
-uint64_t C_array[4];
-
-int main(int argc, char *argv[]) {
-
-  for (int i = A; i <= T; i++) {
-    bitvectors[i] = malloc(SIZE / 8 * sizeof(char));
-    miniheaders[i] = malloc((SIZE / MINIBLOCK_SIZE) * sizeof(uint16_t));
-    macroheaders[i] =
-        malloc(((SIZE + 65535) / MACROBLOCK_SIZE) * sizeof(uint64_t));
-  }
-
-  setup(argv[1]);
-
-  char query[101];
-
-  while (scanf("%100s", query) == 1) {
-    printf("%i occurrences of %s.\n", count(query), query);
-  }
-
-  for (int i = A; i <= T; i++) {
-    free(bitvectors[i]);
-    free(miniheaders[i]);
-    free(macroheaders[i]);
-  }
-
-  return 0;
-}
 
 nucleotides char_to_nucleotide(char c) {
   switch (c) {
@@ -63,7 +23,26 @@ nucleotides char_to_nucleotide(char c) {
   }
 }
 
-void setup(char *filename) {
+void free_fm_index(fm_index *fm) {
+  for (int i = A; i <= T; i++) {
+    free(fm->bitvectors[i]);
+    free(fm->miniheaders[i]);
+    free(fm->macroheaders[i]);
+  }
+
+  free(fm);
+  return;
+}
+
+fm_index *build(char *filename) {
+  fm_index *fm = malloc(sizeof(fm_index));
+
+  for (int i = A; i <= T; i++) {
+    fm->bitvectors[i] = malloc(SIZE / 8 * sizeof(char));
+    fm->miniheaders[i] = malloc((SIZE / MINIBLOCK_SIZE) * sizeof(uint16_t));
+    fm->macroheaders[i] =
+        malloc(((SIZE + 65535) / MACROBLOCK_SIZE) * sizeof(uint64_t));
+  }
 
   FILE *file = fopen(filename, "r");
 
@@ -71,22 +50,22 @@ void setup(char *filename) {
   int currentRank[] = {0, 0, 0, 0};
 
   for (int i = A; i <= T; i++) {
-    memset(bitvectors[i], 0, SIZE / 8);
+    memset(fm->bitvectors[i], 0, SIZE / 8);
   }
 
   for (int i = 0; i < SIZE; i++) {
 
     if (i % MINIBLOCK_SIZE == 0) {
       for (int j = A; j <= T; j++) {
-        miniheaders[j][i / MINIBLOCK_SIZE] = (uint16_t)miniRank[j];
+        fm->miniheaders[j][i / MINIBLOCK_SIZE] = (uint16_t)miniRank[j];
       }
     }
 
     if (i % MACROBLOCK_SIZE == 0) {
       for (int j = A; j <= T; j++) {
         miniRank[j] = 0;
-        miniheaders[j][i / MINIBLOCK_SIZE] = 0;
-        macroheaders[j][i / MACROBLOCK_SIZE] = (uint64_t)currentRank[j];
+        fm->miniheaders[j][i / MINIBLOCK_SIZE] = 0;
+        fm->macroheaders[j][i / MACROBLOCK_SIZE] = (uint64_t)currentRank[j];
       }
     }
 
@@ -94,22 +73,22 @@ void setup(char *filename) {
 
     switch (c) {
     case 'A':
-      bitvectors[A][i / 8] = bitvectors[A][i / 8] | (1 << i % 8);
+      fm->bitvectors[A][i / 8] = fm->bitvectors[A][i / 8] | (1 << i % 8);
       miniRank[A]++;
       currentRank[A]++;
       break;
     case 'C':
-      bitvectors[C][i / 8] = bitvectors[C][i / 8] | (1 << i % 8);
+      fm->bitvectors[C][i / 8] = fm->bitvectors[C][i / 8] | (1 << i % 8);
       miniRank[C]++;
       currentRank[C]++;
       break;
     case 'G':
-      bitvectors[G][i / 8] = bitvectors[G][i / 8] | (1 << i % 8);
+      fm->bitvectors[G][i / 8] = fm->bitvectors[G][i / 8] | (1 << i % 8);
       miniRank[G]++;
       currentRank[G]++;
       break;
     case 'T':
-      bitvectors[T][i / 8] = bitvectors[T][i / 8] | (1 << i % 8);
+      fm->bitvectors[T][i / 8] = fm->bitvectors[T][i / 8] | (1 << i % 8);
       miniRank[T]++;
       currentRank[T]++;
       break;
@@ -120,23 +99,24 @@ void setup(char *filename) {
 
   fclose(file);
 
-  memset(&masks[63], 255, 8);
+  memset(&fm->masks[63], 255, 8);
 
   for (int i = 62; i >= 0; i--) {
-    memcpy(&masks[i], &masks[i + 1], 8);
-    char *charMask = (char *)&masks[i];
+    memcpy(&fm->masks[i], &fm->masks[i + 1], 8);
+    char *charMask = (char *)&fm->masks[i];
     charMask[(i + 1) / 8] = charMask[(i + 1) / 8] & ~(1 << (i + 1) % 8);
   }
 
-  C_array[A] = 0;
-  C_array[C] = rank(A, SIZE - 1);
-  C_array[G] = rank(A, SIZE - 1) + rank(C, SIZE - 1);
-  C_array[T] = rank(A, SIZE - 1) + rank(C, SIZE - 1) + rank(G, SIZE - 1);
+  fm->C_array[A] = 0;
+  fm->C_array[C] = rank(fm, A, SIZE - 1);
+  fm->C_array[G] = rank(fm, A, SIZE - 1) + rank(fm, C, SIZE - 1);
+  fm->C_array[T] =
+      rank(fm, A, SIZE - 1) + rank(fm, C, SIZE - 1) + rank(fm, G, SIZE - 1);
 
-  return;
+  return fm;
 }
 
-int rank(nucleotides nucleotide, int i) {
+int rank(fm_index *fm, nucleotides nucleotide, int i) {
   if (i < 0) {
     return 0;
   }
@@ -144,29 +124,29 @@ int rank(nucleotides nucleotide, int i) {
   int macroblock_index = i / MACROBLOCK_SIZE;
   int miniblock_index = i / MINIBLOCK_SIZE;
 
-  int sum = (int)macroheaders[nucleotide][macroblock_index] +
-            (int)miniheaders[nucleotide][miniblock_index];
+  int sum = (int)fm->macroheaders[nucleotide][macroblock_index] +
+            (int)fm->miniheaders[nucleotide][miniblock_index];
 
-  uint64_t miniblock = *(uint64_t *)&bitvectors[nucleotide][(i / 64) * 8];
+  uint64_t miniblock = *(uint64_t *)&fm->bitvectors[nucleotide][(i / 64) * 8];
 
-  miniblock = miniblock & masks[i % 64];
+  miniblock = miniblock & fm->masks[i % 64];
 
   sum += __builtin_popcountll(miniblock);
 
   return sum;
 }
 
-int count(char *query) {
+int count(fm_index *fm, char *query) {
   int m = strlen(query);
 
   int s = 0;
   int e = SIZE - 1;
 
   for (int i = m - 1; i >= 0 && s <= e; i--) {
-    s = C_array[char_to_nucleotide(query[i])] +
-        rank(char_to_nucleotide(query[i]), s - 1) + 1;
-    e = C_array[char_to_nucleotide(query[i])] +
-        rank(char_to_nucleotide(query[i]), e);
+    s = fm->C_array[char_to_nucleotide(query[i])] +
+        rank(fm, char_to_nucleotide(query[i]), s - 1) + 1;
+    e = fm->C_array[char_to_nucleotide(query[i])] +
+        rank(fm, char_to_nucleotide(query[i]), e);
   }
 
   if (e < s) {
