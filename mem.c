@@ -18,7 +18,7 @@ uint64_t MEMs(char *file, char *rev_file, char *pattern) {
   fm_index *rev_fm = build(rev_file);
   uint64_t mem_counts = 0;
   uint32_t current_index = 0;
-  char *subpattern = malloc(strlen(pattern));
+  char *subpattern = malloc(MEM_LENGTH + 1);
 
   while (current_index < strlen(pattern)) {
 
