@@ -1,4 +1,5 @@
 #include "fm_index.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,38 +19,32 @@ uint64_t MEMs(char *file, char *rev_file, char *pattern) {
   fm_index *rev_fm = build(rev_file);
   uint64_t mem_counts = 0;
   uint32_t current_index = 0;
-  char *subpattern = malloc(MEM_LENGTH + 1);
 
   while (current_index < strlen(pattern)) {
 
-    // reset subpattern and obtain a substring of length 40 from pattern from
-    // the current index.
-    memset(subpattern, 0, strlen(subpattern));
-    memcpy(subpattern, &pattern[current_index],
-           min(MEM_LENGTH, strlen(pattern) - current_index));
-
     // we use i to keep track of where the end of a MEM is
-    int i = current_index + MEM_LENGTH + 1;
+    uint32_t i = current_index;
 
     // check to see if the substring of length 40 occurs in text. If it doesn't,
     // then that subtring cannot be a MEM of length at least 40, so move to the
     // next MEM.
-    if (count(fm, subpattern)) {
-      int s = 0;
-      int e = TEXT_LENGTH - 1;
-      while (i < strlen(pattern) && s <= e) {
-        s = rev_fm->C_array[char_to_nucleotide(pattern[i])] +
-            rank(rev_fm, char_to_nucleotide(pattern[i]), s - 1) + 1;
-        e = rev_fm->C_array[char_to_nucleotide(pattern[i])] +
-            rank(rev_fm, char_to_nucleotide(pattern[i]), e);
+    int s = 0;
+    int e = TEXT_LENGTH - 1;
+    while (i < strlen(pattern) && s <= e) {
+      s = rev_fm->C_array[char_to_nucleotide(pattern[i])] +
+          rank(rev_fm, char_to_nucleotide(pattern[i]), s - 1) + 1;
+      e = rev_fm->C_array[char_to_nucleotide(pattern[i])] +
+          rank(rev_fm, char_to_nucleotide(pattern[i]), e);
 
-        // if s > e here, then i = end + 1
-        if (s > e)
-          break;
+      // if s > e here, then i = end + 1
+      if (s > e)
+        break;
 
-        i++;
-      }
+      i++;
+    }
 
+    // check to see if the mem is at least 40 characters long
+    if (i - current_index >= MEM_LENGTH) {
       printf("(%d, %d)\n", current_index, i - 1);
       mem_counts++;
     }
@@ -59,9 +54,9 @@ uint64_t MEMs(char *file, char *rev_file, char *pattern) {
       break;
     }
 
-    int s = 0;
-    int e = TEXT_LENGTH - 1;
-    int j = i;
+    s = 0;
+    e = TEXT_LENGTH - 1;
+    uint32_t j = i;
     while (j >= 0 && s <= e) {
       s = fm->C_array[char_to_nucleotide(pattern[j])] +
           rank(fm, char_to_nucleotide(pattern[j]), s - 1) + 1;
@@ -82,7 +77,6 @@ uint64_t MEMs(char *file, char *rev_file, char *pattern) {
     }
   }
 
-  free(subpattern);
   free_fm_index(fm);
   free_fm_index(rev_fm);
   return mem_counts;
