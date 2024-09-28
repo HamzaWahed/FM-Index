@@ -1,9 +1,4 @@
-# Maximal Exact Matching
-
-**Group Members:**
-
-1. Nour Allam
-2. Hamza Wahed
+# Maximal Exact Matching for DNA Sequences
 
 ## Instructions for Compiling and Running the Code
 
