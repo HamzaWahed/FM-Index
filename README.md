@@ -1,4 +1,4 @@
-# Maximal Exact Matching for DNA Sequences
+# FM-Index for DNA
 
 ## Instructions for Compiling and Running the Code
 
